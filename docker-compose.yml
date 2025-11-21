@@ -23,21 +23,6 @@ services:
       - iot-network
     restart: unless-stopped
 
-  influxdb:
-    image: influxdb:1.8
-    container_name: influxdb
-    ports:
-      - "8086:8086"
-    environment:
-      - INFLUXDB_DB=telegraf
-      - INFLUXDB_ADMIN_USER=admin
-      - INFLUXDB_ADMIN_PASSWORD=password
-    volumes:
-      - influxdb_data:/var/lib/influxdb
-    networks:
-      - iot-network
-    restart: unless-stopped
-
   mosquitto:
     image: eclipse-mosquitto:latest
     container_name: mosquitto
@@ -54,10 +39,10 @@ services:
 volumes:
   node_red_data:
   grafana_data:
-  influxdb_data:
   mosquitto_data:
   mosquitto_log:
 
 networks:
   iot-network:
     driver: bridge
+
