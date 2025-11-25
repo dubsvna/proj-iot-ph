@@ -1,25 +1,30 @@
 #include <WiFiEsp.h>
 #include <SoftwareSerial.h>
 #include <PubSubClient.h>
+#include <Servo.h> // <--- 1. Incluimos a biblioteca do Servo
 
-// ================= CONFIGURAÇÕES DE PINOS (IMPORTANTE) =================
-// Mudamos para pinos digitais para não bloquear o USB do computador
-// Ligue o TX do ESP no Pino 6 do Arduino
-// Ligue o RX do ESP no Pino 7 do Arduino
-SoftwareSerial SerialEsp(6, 7); // RX, TX
+// ================= CONFIGURAÇÕES DE PINOS =================
+// TX do ESP -> Pino 6 do Arduino
+// RX do ESP -> Pino 7 do Arduino
+SoftwareSerial SerialEsp(6, 7); 
+
+#define PH_PIN A0
+#define SERVO_PIN 9 // <--- 2. Pino onde o Servo está ligado (Fio Laranja/Amarelo)
+
+// ================= LIMITES DE pH PARA ATIVAR O SERVO =================
+// Se o pH for MENOR que 6.0 ou MAIOR que 8.0, o servo move
+const float PH_LIMITE_BAIXO = 6.0;
+const float PH_LIMITE_ALTO = 8.0;
 
 // ================= CONFIGURAÇÕES DE REDE =================
 char ssid[] = "nothing_phone_1";            
 char pass[] = "cmiyglost";           
 
-// Endereço IP do seu computador (onde roda o Python/Mosquitto)
-// Use vírgulas, não pontos, para o IPAddress
-// 3.234.230.104
-IPAddress server(3, 234, 230, 104); // <--- ALTERE AQUI PARA SEU IP
+// Seu servidor MQTT (IP Público)
+IPAddress server(3, 234, 230, 104); 
 const int port = 1883;
 
-// ================= CONFIGURAÇÕES DO SENSOR PH =================
-#define PH_PIN A0
+// ================= VARIÁVEIS DO SENSOR =================
 const float V_MIN = 0.0;
 const float V_MAX = 5.0;
 const float PH_MIN = 0.0;
@@ -27,45 +32,50 @@ const float PH_MAX = 14.0;
 const int NUM_SAMPLES = 10;
 int buf[NUM_SAMPLES];
 
-// ================= OBJETOS MQTT E WIFI =================
+// ================= OBJETOS =================
 WiFiEspClient espClient;
 PubSubClient client(espClient);
+Servo meuServo; // <--- 3. Objeto do Servo
 long lastSend = 0;
 int status = WL_IDLE_STATUS;
 
 void setup() {
-  // Serial do Computador (Debug)
-  Serial.begin(9600);
-  
-  // Serial do ESP-01
-  // Tente 9600 primeiro. Se der timeout, mude para 115200 aqui.
-  SerialEsp.begin(9600); 
+  Serial.begin(9600);     // Debug PC
+  SerialEsp.begin(9600);  // ESP-01
 
-  Serial.println("Inicializando WiFiEsp...");
-  
-  // Inicializa o módulo WiFi usando a porta SoftwareSerial
-  WiFi.init(&SerialEsp);
+  // Inicializa o Servo
+  meuServo.attach(SERVO_PIN);
 
-  // Verifica se o hardware respondeu
-  if (WiFi.status() == WL_NO_SHIELD) {
-    Serial.println("ERRO: Modulo WiFi nao detectado via SoftwareSerial.");
-    Serial.println("Verifique: 1. Conexoes TX/RX cruzadas? 2. CH_PD no 3.3V? 3. Baud rate correto?");
-    // Não trava o loop, mas avisa
+  while (true) {
+
+  delay(1000);
+  meuServo.write(0); // Começa na posição 0 (Normal)
+  Serial.println("Servo inicializado na posicao 0");
+
+  delay(1000);
+  meuServo.write(90); // Começa na posição 0 (Normal)
+  Serial.println("Servo inicializado na posicao 90");
   }
 
-  // Tenta conectar ao WiFi
+  Serial.println("Inicializando WiFiEsp...");
+  WiFi.init(&SerialEsp);
+
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("ERRO: Modulo WiFi nao detectado.");
+    while (true);
+  }
+
   while (status != WL_CONNECTED) {
     Serial.print("Tentando conectar na rede: ");
     Serial.println(ssid);
     status = WiFi.begin(ssid, pass);
-    delay(2000); // Aguarda conexão
+    if(status != WL_CONNECTED) {
+       Serial.println("Falha... tentando em 5s");
+       delay(5000); 
+    }
   }
 
   Serial.println("WiFi Conectado!");
-  Serial.print("IP do Arduino: ");
-  Serial.println(WiFi.localIP());
-
-  // Configura o servidor MQTT
   client.setServer(server, port);
 }
 
@@ -75,7 +85,7 @@ float lerTensaoPH() {
     buf[i] = analogRead(PH_PIN);
     delay(10);
   }
-  // Ordenar para pegar mediana
+  // Ordenação (Bubble sort simples)
   for(int i=0; i<NUM_SAMPLES-1; i++) {
     for(int j=i+1; j<NUM_SAMPLES; j++) {
       if(buf[i] > buf[j]) {
@@ -85,7 +95,7 @@ float lerTensaoPH() {
       }
     }
   }
-  // Média descartando extremos
+  // Média central
   unsigned long valorMedio = 0;
   for (int i = 2; i < 8; i++) {
     valorMedio += buf[i];
@@ -98,55 +108,63 @@ float calcularPH(float tensao) {
   return PH_MAX - ((tensao - V_MIN) * (PH_MAX - PH_MIN)) / (V_MAX - V_MIN);
 }
 
-// ================= RECONEXÃO MQTT =================
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Conectando ao MQTT...");
-    // Tenta conectar com ID único
     if (client.connect("ArduinoPH_Client")) {
       Serial.println("Conectado!");
     } else {
       Serial.print("Falha, rc=");
       Serial.print(client.state());
-      Serial.println(" tentando novamente em 5s");
       delay(5000);
     }
   }
 }
 
+// ================= LÓGICA DO SERVO =================
+void controlarServo(float ph) {
+  // Se o pH estiver fora da faixa segura (Muito ácido ou Muito básico)
+  if (ph < PH_LIMITE_BAIXO || ph > PH_LIMITE_ALTO) {
+    meuServo.write(90); // Move para 90 graus (Ação/Alerta)
+    // Serial.println("ALERTA: pH fora do normal! Servo ativado (90 graus).");
+  } else {
+    meuServo.write(0);  // Volta para 0 graus (Normal)
+    // Serial.println("Normal: pH estavel. Servo em repouso (0 graus).");
+  }
+}
+
 void loop() {
-  // Mantém a conexão MQTT
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
 
-  // Envia a cada 5 segundos
   long now = millis();
   if (now - lastSend > 5000) {
     lastSend = now;
 
-    // Leitura dos dados
+    // 1. Ler Sensor
     float tensao = lerTensaoPH();
     float phValue = calcularPH(tensao);
     int tempMock = 123; 
 
-    // Debug no Monitor Serial
-    Serial.print("Lendo pH: ");
+    // 2. Controlar Servo baseado no pH
+    controlarServo(phValue);
+
+    // 3. Debug
+    Serial.print("pH: ");
     Serial.print(phValue);
-    Serial.println(" | Temp: 123");
+    Serial.print(" | Servo: ");
+    if(phValue < PH_LIMITE_BAIXO || phValue > PH_LIMITE_ALTO) Serial.println("ATIVO (90)");
+    else Serial.println("INATIVO (0)");
 
-    // Prepara JSON Temperatura
-    String jsonTemp = "{\"sensor_id\":\"arduino_temp\",\"temperatura\":";
-    jsonTemp += tempMock;
-    jsonTemp += "}";
-
-    // Prepara JSON pH
+    // 4. Enviar MQTT
+    String jsonTemp = "{\"sensor_id\":\"arduino_temp\",\"temperatura\":123}";
+    
     String jsonPH = "{\"sensor_id\":\"arduino_ph\",\"ph\":";
     jsonPH += String(phValue, 2);
     jsonPH += "}";
 
-    // Envia MQTT
     char msgBuffer[100];
     
     jsonTemp.toCharArray(msgBuffer, 100);
