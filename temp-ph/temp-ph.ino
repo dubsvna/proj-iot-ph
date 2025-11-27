@@ -1,126 +1,147 @@
-#include <WiFiEsp.h>
-#include <SoftwareSerial.h>
+#include <WiFi.h>              // WiFi nativo do ESP32
 #include <PubSubClient.h>
-#include <Servo.h> // <--- 1. Incluimos a biblioteca do Servo
+#include <ESP32Servo.h>        // Biblioteca Servo específica para ESP32
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
-// ================= CONFIGURAÇÕES DE PINOS =================
-// TX do ESP -> Pino 6 do Arduino
-// RX do ESP -> Pino 7 do Arduino
-SoftwareSerial SerialEsp(6, 7); 
+// ================= CONFIGURAÇÕES DE PINOS (ESP32) =================
+// No ESP32 usamos os números dos GPIOs
+#define PH_PIN 34      // Pino Analógico (ADC1). Use pinos como 32, 33, 34, 35, 36
+#define SERVO_PIN 13   // Pino digital PWM
+#define TEMP_PIN 4     // Pino digital para o DS18B20
 
-#define PH_PIN A0
-#define SERVO_PIN 9 // <--- 2. Pino onde o Servo está ligado (Fio Laranja/Amarelo)
+// ================= OBJETOS DOS SENSORES =================
+OneWire oneWire(TEMP_PIN);
+DallasTemperature sensors(&oneWire);
+Servo meuServo;
 
-// ================= LIMITES DE pH PARA ATIVAR O SERVO =================
-// Se o pH for MENOR que 6.0 ou MAIOR que 8.0, o servo move
+// ================= LIMITES E CONSTANTES =================
 const float PH_LIMITE_BAIXO = 6.0;
 const float PH_LIMITE_ALTO = 8.0;
 
-// ================= CONFIGURAÇÕES DE REDE =================
-char ssid[] = "nothing_phone_1";            
-char pass[] = "cmiyglost";           
+// Ajuste para ESP32 (ADC é 12 bits: 0-4095, e voltagem é 3.3V)
+// IMPORTANTE: Se usar divisor de tensão (ex: 2 resistores iguais), 
+// a tensão lida será metade. Ajuste a lógica conforme seu circuito.
+// Abaixo assumindo que você calibrou para entrar no máx 3.3V.
+const float ADC_REF_V = 5.3; 
+const int ADC_RESOLUTION = 4095;
 
-// Seu servidor MQTT (IP Público)
-// 34.235.228.232
+// Calibração do pH (Isso varia MUITO de sensor para sensor)
+const float PH_MAX_VOLTAGE = 2.5; // Exemplo: Tensão do sensor em pH 7 (ajustar offset)
+// No PH4502C: PH 7 geralmente é ajustado para 2.5V no pino PO.
+
+// ================= CONFIGURAÇÕES DE REDE =================
+const char* ssid = "nothing_phone_1";            
+const char* pass = "cmiyglost";           
+
+// Servidor MQTT
+// http://34.235.228.232/
 IPAddress server(34, 235, 228, 232); 
 const int port = 1883;
 
-// ================= VARIÁVEIS DO SENSOR =================
-const float V_MIN = 0.0;
-const float V_MAX = 5.0;
-const float PH_MIN = 0.0;
-const float PH_MAX = 14.0;
-const int NUM_SAMPLES = 10;
-int buf[NUM_SAMPLES];
-
-// ================= OBJETOS =================
-WiFiEspClient espClient;
+WiFiClient espClient;
 PubSubClient client(espClient);
-Servo meuServo; // <--- 3. Objeto do Servo
+
 long lastSend = 0;
-int status = WL_IDLE_STATUS;
+const int NUM_SAMPLES = 20; // Mais amostras pois o ADC do ESP32 oscila mais
 
 void setup() {
-  Serial.begin(9600);     // Debug PC
-  SerialEsp.begin(9600);  // ESP-01
+  Serial.begin(115200); // ESP32 usa serial mais rápido por padrão
 
-  // Inicializa o Servo
-  meuServo.attach(SERVO_PIN);
+  // Inicializa Servo
+  // ESP32Servo precisa de configuração de timers, mas a lib cuida disso no attach
+  meuServo.setPeriodHertz(50); // Servo padrão 50Hz
+  meuServo.attach(SERVO_PIN, 500, 2400); 
+  meuServo.write(0); 
+  
+  // Inicializa Sensor Temperatura
+  sensors.begin();
 
-  Serial.println("Inicializando WiFiEsp...");
-  WiFi.init(&SerialEsp);
+  // Conexão WiFi (Muito mais simples que no Arduino)
+  setup_wifi();
 
-  if (WiFi.status() == WL_NO_SHIELD) {
-    Serial.println("ERRO: Modulo WiFi nao detectado.");
-    while (true);
-  }
-
-  while (status != WL_CONNECTED) {
-    Serial.print("Tentando conectar na rede: ");
-    Serial.println(ssid);
-    status = WiFi.begin(ssid, pass);
-    if(status != WL_CONNECTED) {
-       Serial.println("Falha... tentando em 5s");
-       delay(5000); 
-    }
-  }
-
-  Serial.println("WiFi Conectado!");
   client.setServer(server, port);
 }
 
-// ================= FUNÇÕES DO SENSOR =================
-float lerTensaoPH() {
-  for (int i = 0; i < NUM_SAMPLES; i++) {
-    buf[i] = analogRead(PH_PIN);
-    delay(10);
-  }
-  // Ordenação (Bubble sort simples)
-  for(int i=0; i<NUM_SAMPLES-1; i++) {
-    for(int j=i+1; j<NUM_SAMPLES; j++) {
-      if(buf[i] > buf[j]) {
-        int temp = buf[i];
-        buf[i] = buf[j];
-        buf[j] = temp;
-      }
-    }
-  }
-  // Média central
-  unsigned long valorMedio = 0;
-  for (int i = 2; i < 8; i++) {
-    valorMedio += buf[i];
-  }
-  float tensao = (valorMedio * 5.0) / 1024.0 / 6;
-  return tensao;
-}
+void setup_wifi() {
+  delay(10);
+  Serial.println();
+  Serial.print("Conectando em ");
+  Serial.println(ssid);
 
-float calcularPH(float tensao) {
-  return PH_MAX - ((tensao - V_MIN) * (PH_MAX - PH_MIN)) / (V_MAX - V_MIN);
+  WiFi.begin(ssid, pass);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("");
+  Serial.println("WiFi conectado");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
 }
 
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Conectando ao MQTT...");
-    if (client.connect("ArduinoPH_Client")) {
+    // ID do Cliente
+    if (client.connect("ESP32_PH_Client")) {
       Serial.println("Conectado!");
     } else {
       Serial.print("Falha, rc=");
       Serial.print(client.state());
+      Serial.println(" tentando novamente em 5s");
       delay(5000);
     }
   }
 }
 
-// ================= LÓGICA DO SERVO =================
-void controlarServo(float ph) {
-  // Se o pH estiver fora da faixa segura (Muito ácido ou Muito básico)
-  if (ph < PH_LIMITE_BAIXO || ph > PH_LIMITE_ALTO) {
-    meuServo.write(90); // Move para 90 graus (Ação/Alerta)
-    // Serial.println("ALERTA: pH fora do normal! Servo ativado (90 graus).");
-  } else {
-    meuServo.write(0);  // Volta para 0 graus (Normal)
-    // Serial.println("Normal: pH estavel. Servo em repouso (0 graus).");
+// Leitura do pH com suavização (Média Móvel)
+float lerPhVoltage() {
+  unsigned long soma = 0;
+  // O ADC do ESP32 não é perfeitamente linear e tem ruído
+  // Fazemos várias leituras
+  for (int i = 0; i < NUM_SAMPLES; i++) {
+    soma += analogRead(PH_PIN);
+    delay(5); // Pequeno delay entre leituras
   }
+  
+  float mediaADC = soma / (float)NUM_SAMPLES;
+  
+  // Converte para Tensão
+  // ATENÇÃO: Se usar divisor de tensão, multiplique pelo fator aqui
+  float tensao = (mediaADC * ADC_REF_V) / ADC_RESOLUTION;
+  
+  return tensao;
+}
+
+float calcularPH(float tensao) {
+  // A fórmula do módulo PH4502C geralmente é linear
+  // pH = 7 + ((2.5 - tensao) / m)
+  // Onde 'm' é a inclinação (slope). Sem calibração, usamos uma aproximação.
+  // Você precisará calibrar isso com soluções buffer 4.0 e 7.0
+  
+  // Exemplo genérico (Assumindo que em pH 7 a tensão é ~2.5V e a sensibilidade é alta)
+  // Ajuste os valores '3.5' abaixo até bater com seu medidor de referência
+  float ph = 7.0 + ((2.5 - tensao) * 3.5); 
+  
+  return ph;
+}
+
+float lerTemperatura() {
+  sensors.requestTemperatures(); 
+  float tempC = sensors.getTempCByIndex(0);
+  if (tempC == DEVICE_DISCONNECTED_C) return -999.0;
+  return tempC;
+}
+
+void controllingServo(float ph) {
+    if (ph < PH_LIMITE_BAIXO || ph > PH_LIMITE_ALTO) {
+        meuServo.write(90); 
+    } else {
+        meuServo.write(0);  
+    }
 }
 
 void loop() {
@@ -133,33 +154,36 @@ void loop() {
   if (now - lastSend > 5000) {
     lastSend = now;
 
-    // 1. Ler Sensor
-    float tensao = lerTensaoPH();
+    // 1. Leituras
+    float tensao = lerPhVoltage();
     float phValue = calcularPH(tensao);
-    int tempMock = 123; 
+    float tempReal = lerTemperatura();
 
-    // 2. Controlar Servo baseado no pH
-    controlarServo(phValue);
+    // 2. Controle
+    controllingServo(phValue);
 
     // 3. Debug
-    Serial.print("pH: ");
+    Serial.print("ADC Volts: ");
+    Serial.print(tensao);
+    Serial.print("V | pH Calc: ");
     Serial.print(phValue);
-    Serial.print(" | Servo: ");
-    if(phValue < PH_LIMITE_BAIXO || phValue > PH_LIMITE_ALTO) Serial.println("ATIVO (90)");
-    else Serial.println("INATIVO (0)");
+    Serial.print(" | Temp: ");
+    Serial.println(tempReal);
 
-    // 4. Enviar MQTT
-    String jsonTemp = "{\"sensor_id\":\"arduino_temp\",\"temperatura\":123}";
-    
-    String jsonPH = "{\"sensor_id\":\"arduino_ph\",\"ph\":";
-    jsonPH += String(phValue, 2);
-    jsonPH += "}";
-
+    // 4. Envio MQTT (O ESP32 aguenta enviar rápido, não precisa daquele delay gigante)
     char msgBuffer[100];
-    
+
+    // Temp
+    String jsonTemp = "{\"sensor_id\":\"esp32_temp\",\"temperatura\":";
+    jsonTemp += String(tempReal, 2);
+    jsonTemp += "}";
     jsonTemp.toCharArray(msgBuffer, 100);
     client.publish("sensor/temperatura", msgBuffer);
 
+    // pH
+    String jsonPH = "{\"sensor_id\":\"esp32_ph\",\"ph\":";
+    jsonPH += String(phValue, 2);
+    jsonPH += "}";
     jsonPH.toCharArray(msgBuffer, 100);
     client.publish("sensor/ph", msgBuffer);
     
