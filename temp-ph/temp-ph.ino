@@ -21,7 +21,8 @@ char ssid[] = "nothing_phone_1";
 char pass[] = "cmiyglost";           
 
 // Seu servidor MQTT (IP Público)
-IPAddress server(3, 234, 230, 104); 
+// 34.235.228.232
+IPAddress server(34, 235, 228, 232); 
 const int port = 1883;
 
 // ================= VARIÁVEIS DO SENSOR =================
@@ -45,17 +46,6 @@ void setup() {
 
   // Inicializa o Servo
   meuServo.attach(SERVO_PIN);
-
-  while (true) {
-
-  delay(1000);
-  meuServo.write(0); // Começa na posição 0 (Normal)
-  Serial.println("Servo inicializado na posicao 0");
-
-  delay(1000);
-  meuServo.write(90); // Começa na posição 0 (Normal)
-  Serial.println("Servo inicializado na posicao 90");
-  }
 
   Serial.println("Inicializando WiFiEsp...");
   WiFi.init(&SerialEsp);
