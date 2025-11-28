@@ -1,0 +1,336 @@
+[
+    {
+        "id": "c105a06c16844480",
+        "type": "tab",
+        "label": "Flow Principal",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "58a5f91c1064e369",
+        "type": "mqtt in",
+        "z": "c105a06c16844480",
+        "name": "Equipamento_02",
+        "topic": "sensor/equipamento_02",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "95ad24c5d059b623",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 220,
+        "y": 340,
+        "wires": [
+            [
+                "3550a610e6f51e13",
+                "5830db9e99739de3",
+                "55f407ce0e32b602"
+            ]
+        ]
+    },
+    {
+        "id": "5830db9e99739de3",
+        "type": "influxdb out",
+        "z": "c105a06c16844480",
+        "influxdb": "db8efa2533cc95fa",
+        "name": "Mackenzie",
+        "measurement": "equipamentos",
+        "precision": "",
+        "retentionPolicy": "",
+        "database": "database",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "Student",
+        "bucket": "bucket",
+        "x": 570,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "55f407ce0e32b602",
+        "type": "function",
+        "z": "c105a06c16844480",
+        "name": "Alerta Telegram",
+        "func": "// Configurações\nconst PH_MIN = 6.0;\nconst PH_MAX = 8.0;\nlet alertaAtivo = false;\nlet normalizadorAtivo = false;\n\n// Valor do pH e Nome do Equipamento vindo do payload\nconst ph = parseFloat(msg.payload.ph);\nconst equipamento = msg.payload.sensor_id\nconst temp = msg.payload.temp\nif (isNaN(ph)) {\n    node.error(\"Valor de pH inválido\");\n    return null;\n}\nmsg.payload.chatId = '@guapos_iot'\nmsg.payload.content = ''\nmsg.payload.type = 'message'\n// Verifica limites - pH DESREGULADO\nif (ph < PH_MIN || ph > PH_MAX) {\n    if (!alertaAtivo) {\n        // Cria mensagem de alerta\n        let tipo = ph < PH_MIN ? \"Ácido\" : \"Alcalino\";\n        let limite = ph < PH_MIN ? PH_MIN : PH_MAX;\n        msg.payload.content = `🚨 ALERTA - pH DESREGULADO!\\n` +\n            `Nome: ${equipamento.toUpperCase()}\\n` +\n            `Valor atual: ${ph.toFixed(2)}\\n` +\n            `Limite ideal: ${limite}\\n` +\n            `Temperatura do Recipiente: ${temp}\\n` +\n            `Tipo: ${tipo}\\n` +\n            `💧 Normalizador sendo inserido na água`;\n        alertaAtivo = true;\n        normalizadorAtivo = true;\n        return msg;\n    }\n} else {\n    // pH REGULADO (dentro dos limites normais)\n    if (alertaAtivo || normalizadorAtivo) {\n        msg.payload.content = `✅ pH REGULADO - SISTEMA NORMAL\\n` +\n            `Nome: ${equipamento.toUpperCase()}\\n` +\n            `Valor atual: ${ph.toFixed(2)}\\n` +\n            `Situação: Dentro dos limites ideais\\n` +\n            `⏹️ Normalizador desativado`;\n\n        alertaAtivo = false;\n        normalizadorAtivo = false;\n        return msg;\n    }\n}",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 560,
+        "y": 200,
+        "wires": [
+            [
+                "d67b014f474c7257"
+            ]
+        ]
+    },
+    {
+        "id": "d67b014f474c7257",
+        "type": "telegram sender",
+        "z": "c105a06c16844480",
+        "name": "",
+        "bot": "b3eb34a44a14ffcf",
+        "haserroroutput": false,
+        "outputs": 1,
+        "x": 850,
+        "y": 200,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "3550a610e6f51e13",
+        "type": "debug",
+        "z": "c105a06c16844480",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 700,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "bebbd198ddb357c6",
+        "type": "mqtt in",
+        "z": "c105a06c16844480",
+        "name": "Equipamento_03",
+        "topic": "sensor/equipamento_03",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "95ad24c5d059b623",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 220,
+        "y": 280,
+        "wires": [
+            [
+                "3550a610e6f51e13",
+                "5830db9e99739de3",
+                "55f407ce0e32b602"
+            ]
+        ]
+    },
+    {
+        "id": "9eb98271e362738b",
+        "type": "mqtt in",
+        "z": "c105a06c16844480",
+        "name": "Equipamento_01",
+        "topic": "equipamento_01",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "95ad24c5d059b623",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 220,
+        "y": 220,
+        "wires": [
+            [
+                "3550a610e6f51e13",
+                "55f407ce0e32b602",
+                "5830db9e99739de3"
+            ]
+        ]
+    },
+    {
+        "id": "8fded22d1217470f",
+        "type": "influxdb out",
+        "z": "c105a06c16844480",
+        "influxdb": "db8efa2533cc95fa",
+        "name": "Mackenzie",
+        "measurement": "meteorologia",
+        "precision": "",
+        "retentionPolicy": "",
+        "database": "database",
+        "precisionV18FluxV20": "ms",
+        "retentionPolicyV18Flux": "",
+        "org": "Student",
+        "bucket": "bucket",
+        "x": 1130,
+        "y": 580,
+        "wires": []
+    },
+    {
+        "id": "33f317cd6115cf9c",
+        "type": "function",
+        "z": "c105a06c16844480",
+        "name": "OpenWeather",
+        "func": "// Configurações da API\nconst cidade = \"São Paulo\";\nconst pais = \"BR\";\nconst token = \"c5c8be5c869cb805e05a6983e3c6663b\";\nconst unidades = \"metric\";\n\n// Construir a URL\nconst url = `https://api.openweathermap.org/data/2.5/weather?q=${cidade},${pais}&units=${unidades}&appid=${token}`;\n\n// Atribuir a URL ao msg.payload\nmsg.url = url;\nmsg.method = \"GET\";\nmsg.headers = {};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 580,
+        "wires": [
+            [
+                "eee4886267fa747e"
+            ]
+        ]
+    },
+    {
+        "id": "cb64769cd2d35c3f",
+        "type": "inject",
+        "z": "c105a06c16844480",
+        "name": "inject",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "10",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 250,
+        "y": 580,
+        "wires": [
+            [
+                "33f317cd6115cf9c"
+            ]
+        ]
+    },
+    {
+        "id": "eee4886267fa747e",
+        "type": "http request",
+        "z": "c105a06c16844480",
+        "name": "",
+        "method": "GET",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 660,
+        "y": 580,
+        "wires": [
+            [
+                "4bb221dd4aa9bd3c"
+            ]
+        ]
+    },
+    {
+        "id": "4bb221dd4aa9bd3c",
+        "type": "function",
+        "z": "c105a06c16844480",
+        "name": "Montagem de Payload",
+        "func": "// Versão mínima - apenas temperatura, local e tempo\nif (msg.payload && msg.payload.main) {\n    const weatherData = msg.payload;\n\n    msg.payload = \n        {\n            measurement: \"weather_monitoring\",\n            location: weatherData.name,\n            country: weatherData.sys.country,\n            source: \"openweather\",\n            temperature: weatherData.main.temp,\n            location_name: weatherData.name,\n            timestamp: new Date()\n        }\n    ;\n\n    return msg;\n}\nreturn null;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 900,
+        "y": 580,
+        "wires": [
+            [
+                "8fded22d1217470f"
+            ]
+        ]
+    },
+    {
+        "id": "95ad24c5d059b623",
+        "type": "mqtt-broker",
+        "name": "",
+        "broker": "mosquitto",
+        "port": 1883,
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": 4,
+        "keepalive": 60,
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "db8efa2533cc95fa",
+        "type": "influxdb",
+        "hostname": "127.0.0.1",
+        "port": 8086,
+        "protocol": "http",
+        "database": "bucket",
+        "name": "Student",
+        "usetls": false,
+        "tls": "",
+        "influxdbVersion": "2.0",
+        "url": "https://us-east-1-1.aws.cloud2.influxdata.com",
+        "timeout": 10,
+        "rejectUnauthorized": true
+    },
+    {
+        "id": "b3eb34a44a14ffcf",
+        "type": "telegram bot",
+        "botname": "GuaposBOT",
+        "usernames": "",
+        "chatids": "",
+        "baseapiurl": "",
+        "testenvironment": false,
+        "updatemode": "polling",
+        "pollinterval": 300,
+        "usesocks": false,
+        "sockshost": "",
+        "socksprotocol": "socks5",
+        "socksport": 6667,
+        "socksusername": "anonymous",
+        "sockspassword": "",
+        "bothost": "",
+        "botpath": "",
+        "localbothost": "0.0.0.0",
+        "localbotport": 8443,
+        "publicbotport": 8443,
+        "privatekey": "",
+        "certificate": "",
+        "useselfsignedcertificate": false,
+        "sslterminated": false,
+        "verboselogging": false
+    },
+    {
+        "id": "7c555c7d14a9db80",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-influxdb": "0.7.0",
+            "node-red-contrib-telegrambot": "17.0.2"
+        }
+    }
+]
